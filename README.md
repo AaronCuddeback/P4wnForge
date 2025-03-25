@@ -21,9 +21,11 @@ Developed by Detective Aaron Cuddeback
 P4wnForge includes a simple one-click launcher that automatically installs all required dependencies and starts the application:
 
 1. Download or clone the repository
-2. Double-click on `Start_P4wnForge` shortcut (recommended) or `P4wnForge.bat`
-3. The program will silently install all required dependencies and launch the application
-4. A desktop shortcut with the P4wnForge icon will be created automatically for future use
+2. Run `create_shortcut.bat` to create the program shortcut
+3. Double-click on the newly created `Start_P4wnForge` shortcut (you can copy it to your desktop)
+4. The program will silently install all required dependencies and launch the application
+
+The shortcut created by this method will work properly even when the P4wnForge folder is moved or copied to a different computer.
 
 ## Manual Installation Guide
 
@@ -71,11 +73,14 @@ For enhanced functionality, ensure these additional tools are available:
 
 ## Running the Application
 
-After installation, you can run the application with:
+After installation, you can run the application in one of these ways:
 
-```bash
-python p4wnforge.py
-```
+1. Double-click the `Start_P4wnForge` shortcut created with `create_shortcut.bat`
+2. Run `P4wnForge.bat` directly
+3. Or using the Python interpreter:
+   ```bash
+   python p4wnforge.py
+   ```
 
 ## Hash Cracking Features
 
@@ -134,6 +139,18 @@ The PDF cracking functionality uses a specialized module for enhanced performanc
 
 3. **Permission Issues**:
    - You may need to run the program as Administrator if you encounter permission errors
+
+4. **Shortcut Problems (Missing Icon or Not Working)**:
+   - Run `create_shortcut.bat` to generate a new shortcut
+   - The batch file will create shortcuts both in the program folder and on your desktop
+   - This fixes issues with missing icons or shortcuts that don't work after moving the program
+   
+   If the automatic fix doesn't work, you can manually create a shortcut:
+   - Right-click in the P4wnForge folder and select "New > Shortcut"
+   - Enter `P4wnForge.bat` as the target (use the relative path)
+   - Name it "Start_P4wnForge"
+   - Right-click the new shortcut and select "Properties"
+   - Click "Change Icon" and browse to the P4wnForge_icon.ico file in the same folder
 
 ## License
 
