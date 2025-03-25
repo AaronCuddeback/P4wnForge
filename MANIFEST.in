@@ -1,0 +1,31 @@
+include *.py
+include *.bat
+include *.sh
+include *.md
+include *.txt
+include *.ico
+include *.webp
+include *.png
+include *.json
+include requirements.txt
+include LICENSE
+include COPYING
+include TODO
+include changelog
+include P4wnForge_icon.ico
+include P4wnForge.webp
+include p4wnForgeSplash.webp
+
+recursive-include tools *
+recursive-include tunings *
+recursive-include rules *
+recursive-include OpenCL *
+recursive-include modules *
+recursive-include masks *
+recursive-include layouts *
+recursive-include kernels *
+recursive-include hashes *
+recursive-include extra *
+recursive-include docs *
+recursive-include dictionaries *
+recursive-include charsets * 
