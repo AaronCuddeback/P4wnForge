@@ -1,4 +1,6 @@
-# PassCrack - Password Recovery Tool
+# P4wnForge - Password Recovery Tool
+
+![P4wnForge](P4wnForge.webp)
 
 A comprehensive password recovery application for various file formats including Office documents, PDFs, NTLM and NetNTLMv2 hashes, and more.
 
@@ -14,90 +16,77 @@ Developed by Detective Aaron Cuddeback
 - Dark/Light theme support
 - Real-time cracking progress display
 
-## Installation Guide
+## Quick Start - One-Click Launcher
+
+P4wnForge includes a simple one-click launcher that automatically installs all required dependencies and starts the application:
+
+1. Download or clone the repository
+2. Run `create_shortcut.bat` to create the program shortcut
+3. Double-click on the newly created `Start_P4wnForge` shortcut (you can copy it to your desktop)
+4. The program will silently install all required dependencies and launch the application
+
+The shortcut created by this method will work properly even when the P4wnForge folder is moved or copied to a different computer.
+
+## Manual Installation Guide
+
+If you prefer to install P4wnForge manually, follow these steps:
 
 ### Prerequisites
 
 #### 1. Install Python
 
-**Windows:**
 1. Download the latest Python installer (3.8+) from [python.org](https://www.python.org/downloads/)
 2. Run the installer
 3. **Important:** Check the box "Add Python to PATH" during installation
 4. Click "Install Now"
 5. Verify installation by opening Command Prompt and typing: `python --version`
 
-**macOS:**
-1. Download the latest Python installer from [python.org](https://www.python.org/downloads/)
-2. Run the installer and follow the prompts
-3. Verify installation by opening Terminal and typing: `python3 --version`
-
-**Linux:**
-```bash
-sudo apt update
-sudo apt install python3 python3-pip
-python3 --version
-```
-
 #### 2. Install Required Dependencies
 
-After installing Python, open a Command Prompt (Windows) or Terminal (macOS/Linux) and run:
+After installing Python, open a Command Prompt and run:
 
 ```bash
 # Install required Python packages
-pip install paramiko pymupdf pillow requests tqdm
+pip install -r requirements.txt
 ```
 
-Note: `tkinter` is typically included with Python installations, but if it's missing, you can install it:
-- Windows: Usually included with the Python installer
-- macOS: `brew install python-tk`
-- Linux: `sudo apt install python3-tk`
+Note: `tkinter` is typically included with Python installations, but if it's missing, you can reinstall Python and check the "tcl/tk and IDLE" option.
 
 #### 3. Essential External Tool - Hashcat
 
-PassCrack requires Hashcat for password cracking functionality:
+P4wnForge requires Hashcat for password cracking functionality:
 
-**Windows:**
 1. Download the latest release from [hashcat.net](https://hashcat.net/hashcat/)
 2. Extract the ZIP file to a location on your computer
-3. Ensure the hashcat.exe file is accessible from the PassCrack directory, or place it in the same directory as passcrack.py
-
-**macOS:**
-```bash
-brew install hashcat
-```
-
-**Linux:**
-```bash
-sudo apt install hashcat
-```
+3. Ensure the hashcat.exe file is accessible from the P4wnForge directory, or place it in the same directory as p4wnforge.py
 
 #### 4. Optional External Tools
 
-For enhanced functionality, install these additional tools:
+For enhanced functionality, ensure these additional tools are available:
 
 **Extraction Scripts:**
-- **office2john.py**: Download from the [John the Ripper GitHub repo](https://github.com/openwall/john/tree/bleeding-jumbo/run) and place in the application directory
-- **pdfbrute.py**: This file should be included with the application for enhanced PDF cracking capabilities
+- **office2john.py**: Should be included with the application for Office document hash extraction
+- **pdfbrute.py**: Should be included with the application for enhanced PDF cracking capabilities
 
 **Full John the Ripper Installation:**
-- Windows: Download from [Openwall](https://www.openwall.com/john/)
-- macOS: `brew install john`
-- Linux: `sudo apt install john`
+- Download from [Openwall](https://www.openwall.com/john/) for additional cracking capabilities
 
 ## Running the Application
 
-After installation, you can run the application with:
+After installation, you can run the application in one of these ways:
 
-```bash
-python passcrack.py
-```
+1. Double-click the `Start_P4wnForge` shortcut created with `create_shortcut.bat`
+2. Run `P4wnForge.bat` directly
+3. Or using the Python interpreter:
+   ```bash
+   python p4wnforge.py
+   ```
 
 ## Hash Cracking Features
 
 ### NTLM & NetNTLMv2 Cracking
 
-PassCrack now features enhanced support for NetNTLMv2 hash cracking:
+P4wnForge features enhanced support for NetNTLMv2 hash cracking:
 
 1. **Automatic Format Detection**: The application can detect and properly format NetNTLMv2 hashes from common capture formats
 2. **Default NetNTLMv2 Mode**: The hash type dropdown now defaults to NetNTLMv2 for convenience
@@ -121,7 +110,7 @@ PassCrack now features enhanced support for NetNTLMv2 hash cracking:
 
 ## Dictionary Management
 
-PassCrack includes a dictionary manager for organizing and analyzing wordlists:
+P4wnForge includes a dictionary manager for organizing and analyzing wordlists:
 
 - Download common wordlists directly from the application
 - Add custom wordlists
@@ -142,15 +131,26 @@ The PDF cracking functionality uses a specialized module for enhanced performanc
 ### Common Issues
 
 1. **Hashcat Not Found**:
-   - Ensure hashcat is installed and accessible in your PATH, or place it in the same directory as passcrack.py
-   - On Windows, you may need to install Visual C++ Redistributable packages
+   - Ensure hashcat is installed and accessible in your PATH, or place it in the same directory as p4wnforge.py
+   - You may need to install Visual C++ Redistributable packages
 
 2. **Missing Python Dependencies**:
    - Run `pip install -r requirements.txt` if provided, or install dependencies manually
 
 3. **Permission Issues**:
-   - On Windows, you may need to run the program as Administrator
-   - On Linux/macOS, ensure proper permissions for the application directory
+   - You may need to run the program as Administrator if you encounter permission errors
+
+4. **Shortcut Problems (Missing Icon or Not Working)**:
+   - Run `create_shortcut.bat` to generate a new shortcut
+   - The batch file will create shortcuts both in the program folder and on your desktop
+   - This fixes issues with missing icons or shortcuts that don't work after moving the program
+   
+   If the automatic fix doesn't work, you can manually create a shortcut:
+   - Right-click in the P4wnForge folder and select "New > Shortcut"
+   - Enter `P4wnForge.bat` as the target (use the relative path)
+   - Name it "Start_P4wnForge"
+   - Right-click the new shortcut and select "Properties"
+   - Click "Change Icon" and browse to the P4wnForge_icon.ico file in the same folder
 
 ## License
 
