@@ -27,7 +27,7 @@ dictionaries/
 *.log
 
 # Personal config files
-.passcrack/
+.p4wnforge/
 config.json
 dictionaries.json
 ssh_sessions.json

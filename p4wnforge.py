@@ -15,9 +15,18 @@ import time
 import paramiko
 from paramiko import SSHClient
 from stat import S_ISDIR
+import re
 
 # Ensure you have installed PyMuPDF (pip install PyMuPDF)
 import fitz  # PyMuPDF
+
+# Import PDFBruteForcer from pdfbrute.py
+try:
+    from pdfbrute import PDFBruteForcer, AVAILABLE_LIBRARIES
+except ImportError:
+    # Define fallback if import fails
+    AVAILABLE_LIBRARIES = []
+    PDFBruteForcer = None
 
 # Custom Combobox class to fix the selection issue
 class FixedCombobox(ttk.Combobox):
@@ -93,17 +102,23 @@ class FixedCombobox(ttk.Combobox):
 class PasswordCrackerApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("PassCrack Password Recovery Tool")
+        self.root.title("P4wnForge Password Recovery Tool")
         self.root.geometry("950x700")
         self.root.minsize(800, 600)
         
         # Set application icon
         try:
-            icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "hightech.png")
-            if os.path.exists(icon_path):
-                icon_img = Image.open(icon_path)
-                icon_photo = ImageTk.PhotoImage(icon_img)
-                self.root.iconphoto(True, icon_photo)
+            if platform.system() == "Windows":
+                icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "P4wnForge_icon.ico")
+                if os.path.exists(icon_path):
+                    self.root.iconbitmap(icon_path)
+            else:
+                # For non-Windows platforms, use webp
+                icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "P4wnForge.webp")
+                if os.path.exists(icon_path):
+                    icon_img = Image.open(icon_path)
+                    icon_photo = ImageTk.PhotoImage(icon_img)
+                    self.root.iconphoto(True, icon_photo)
         except Exception as e:
             print(f"Error setting application icon: {e}")
         
@@ -112,7 +127,7 @@ class PasswordCrackerApp:
             'window_width': 950,
             'window_height': 700,
             'dark_mode': False, 
-            'sash_position': 400
+            'sash_position': 250  # Lower position gives more space to output area
         }
         
         # Load configuration before initializing UI elements
@@ -177,7 +192,7 @@ class PasswordCrackerApp:
         
         # Upper part contains the tab control
         self.tab_control = ttk.Notebook(self.main_paned)
-        self.main_paned.add(self.tab_control, weight=2)  # Give more weight to top panel
+        self.main_paned.add(self.tab_control, weight=1)  # Equal weight for top panel
         
         # Create tabs
         self.office_tab = ttk.Frame(self.tab_control)
@@ -210,7 +225,7 @@ class PasswordCrackerApp:
         
         # Lower part contains password list selector and output
         self.lower_frame = ttk.Frame(self.main_paned)
-        self.main_paned.add(self.lower_frame, weight=1)  # Give less weight to bottom panel
+        self.main_paned.add(self.lower_frame, weight=1)  # Equal weight to top panel
         
         # Password list selector in the lower frame
         password_frame = ttk.Frame(self.lower_frame, padding="5")
@@ -247,7 +262,7 @@ class PasswordCrackerApp:
         self.output_text.tag_configure("password_found", foreground="green", font=("Helvetica", 10, "bold"))
         
         # Add initial text to show the output is working
-        self.output_text.insert(tk.END, "PassCrack initialized - ready to recover passwords\n")
+        self.output_text.insert(tk.END, "P4wnForge initialized - ready to recover passwords\n")
         
         scrollbar = ttk.Scrollbar(text_frame, orient=tk.VERTICAL, command=self.output_text.yview)
         scrollbar.pack(fill=tk.Y, side=tk.RIGHT)
@@ -284,6 +299,33 @@ class PasswordCrackerApp:
         # Check for hashcat and other prerequisites
         self.check_hashcat()
         self.check_john_tools()
+        
+        # Set a much larger output area by default - this runs after all initialization
+        self.root.after(1000, self.ensure_large_output_area)
+
+    def ensure_large_output_area(self):
+        """Forces the output area to take up at least 60% of the window height"""
+        if not hasattr(self, 'main_paned'):
+            return
+            
+        try:
+            # Calculate a position that gives at least 60% to the output area
+            window_height = self.root.winfo_height()
+            # The lower this number, the more space for the output area
+            target_pos = int(window_height * 0.4)  # 40% for top, 60% for bottom
+            
+            # Don't go too small for small windows
+            if target_pos < 200:
+                target_pos = 200
+                
+            # Set the sash position directly
+            self.main_paned.sashpos(0, target_pos)
+            
+            # Save this position in the config
+            self.config['sash_position'] = target_pos
+            self.save_window_config()
+        except Exception:
+            pass
 
     def _set_initial_sash_position(self):
         """Set the initial sash position from config or reasonable default"""
@@ -296,19 +338,34 @@ class PasswordCrackerApp:
                 
                 # Check if we have a valid sash position in config
                 if 'sash_position' in self.config and self.config['sash_position'] > 100:
-                    # Schedule the sash position setting after a short delay
+                    # A direct immediate set, plus a delayed set to ensure it takes effect
+                    sash_pos = self.config['sash_position']
+                    
+                    # Set immediately 
+                    self.main_paned.sashpos(0, sash_pos)
+                    
+                    # Then schedule another set after a short delay to ensure it takes effect
                     # This ensures the window is fully rendered before setting the position
-                    self.root.after(100, lambda: self.main_paned.sashpos(0, self.config['sash_position']))
+                    self.root.after(100, lambda: self.main_paned.sashpos(0, sash_pos))
+                    self.root.after(500, lambda: self.main_paned.sashpos(0, sash_pos))
                 else:
-                    # Default to 70% of height for tabs, 30% for output
-                    height = self.root.winfo_height()
-                    try:
-                        # Schedule with a delay for the same reason
-                        self.root.after(100, lambda: self.main_paned.sashpos(0, int(height * 0.7)))
-                    except Exception as e:
-                        print(f"Error setting default sash position: {e}")
-            except Exception as e:
-                print(f"Error setting sash position: {e}")
+                    # Force a fixed position at 250 pixels from the top (gives much more space to output area)
+                    # The lower this number, the more space for the output area
+                    target_pos = 250
+                    
+                    # Set immediately
+                    self.main_paned.sashpos(0, target_pos)
+                    
+                    # And with delay to ensure it takes effect
+                    self.root.after(100, lambda: self.main_paned.sashpos(0, target_pos))
+                    self.root.after(500, lambda: self.main_paned.sashpos(0, target_pos))
+                    
+                    # Update the config so this position is saved
+                    self.config['sash_position'] = target_pos
+                    # Save the config immediately
+                    self.save_window_config()
+            except Exception:
+                pass  # Silently ignore errors
 
     def load_window_config(self):
         """Load window configuration from file"""
@@ -322,7 +379,7 @@ class PasswordCrackerApp:
         
         try:
             # Try to use user's home directory for config file to avoid permission issues
-            config_dir = os.path.join(os.path.expanduser("~"), ".passcrack")
+            config_dir = os.path.join(os.path.expanduser("~"), ".p4wnforge")
             os.makedirs(config_dir, exist_ok=True)
             self.config_file = os.path.join(config_dir, "config.json")
             self.dictionaries_file = os.path.join(config_dir, "dictionaries.json")
@@ -345,8 +402,6 @@ class PasswordCrackerApp:
                 self.root.geometry(f"+{self.config['window_x']}+{self.config['window_y']}")
         except Exception as e:
             print(f"Error loading config: {e}")
-            import traceback
-            traceback.print_exc()
             # Use default values from config
             self.root.geometry(f"{self.config['window_width']}x{self.config['window_height']}")
 
@@ -355,7 +410,7 @@ class PasswordCrackerApp:
         try:
             # Ensure config file path is defined
             if not hasattr(self, 'config_file'):
-                config_dir = os.path.join(os.path.expanduser("~"), ".passcrack")
+                config_dir = os.path.join(os.path.expanduser("~"), ".p4wnforge")
                 os.makedirs(config_dir, exist_ok=True)
                 self.config_file = os.path.join(config_dir, "config.json")
             
@@ -367,14 +422,14 @@ class PasswordCrackerApp:
                 self.config['window_x'] = int(geometry[2])
                 self.config['window_y'] = int(geometry[3]) if len(geometry) > 3 else 0
             
-            # Save sash position if main_paned exists
+            # Capture the current sash position if main_paned exists
             if hasattr(self, 'main_paned'):
                 try:
                     # Only save if sash position is reasonable (not collapsed)
-                    sash_pos = self.main_paned.sashpos(0)
-                    if sash_pos > 100:  # Ensure we're not saving a fully collapsed position
-                        self.config['sash_position'] = sash_pos
-                except Exception as e:
+                    current_sash_pos = self.main_paned.sashpos(0)
+                    if current_sash_pos > 100:  # Ensure we're not saving a fully collapsed position
+                        self.config['sash_position'] = current_sash_pos
+                except Exception:
                     # If we can't get the sash position, just continue without updating it
                     pass
             
@@ -447,6 +502,15 @@ class PasswordCrackerApp:
 
     def _on_window_close(self):
         """Handler for window close event"""
+        # Capture the current sash position before closing
+        try:
+            if hasattr(self, 'main_paned'):
+                current_sash_pos = self.main_paned.sashpos(0)
+                if current_sash_pos > 0:  # Only save valid positions
+                    self.config['sash_position'] = current_sash_pos
+        except Exception:
+            pass
+            
         # Save configuration before closing
         self.save_window_config()
         # Save dictionaries before closing
@@ -496,7 +560,7 @@ class PasswordCrackerApp:
             self.style.configure('TCheckbutton', 
                                background='#2E2E2E', 
                                foreground='#FFFFFF',
-                               indicatorsize=14)  # Larger indicator for better visibility
+                               indicatorsize=14)
             self.style.map('TCheckbutton',
                          background=[('active', '#2E2E2E')],
                          foreground=[('active', '#FFFFFF')],
@@ -546,6 +610,10 @@ class PasswordCrackerApp:
             if hasattr(self, 'remote_listbox') and self.remote_listbox:
                 self.remote_listbox.config(bg='#1E1E1E', fg='#CCCCCC', selectbackground='#4E4E4E', selectforeground='#FFFFFF')
             
+            # Configure SSH current directory entry for dark mode
+            if hasattr(self, 'ssh_current_dir_entry') and self.ssh_current_dir_entry:
+                self.ssh_current_dir_entry.config(readonlybackground='#3E3E3E', fg='#FFFFFF')
+            
             # Set root background
             self.root.configure(bg='#2E2E2E')
             
@@ -579,7 +647,7 @@ class PasswordCrackerApp:
             self.style.map('TCheckbutton',
                           background=[('active', '#F0F0F0')],
                           foreground=[('active', '#000000')],
-                          indicatorcolor=[('selected', '#0078D7'), ('', '#E0E0E0')])  # Blue when selected
+                          indicatorcolor=[('selected', '#0078D7'), ('', '#E0E0E0')])
             
             # Theme switch checkbutton - special styling for light mode
             self.style.configure('Switch.TCheckbutton', 
@@ -625,6 +693,10 @@ class PasswordCrackerApp:
             if hasattr(self, 'remote_listbox') and self.remote_listbox:
                 self.remote_listbox.config(bg='#FFFFFF', fg='#000000', selectbackground='#0078D7', selectforeground='#FFFFFF')
             
+            # Configure SSH current directory entry for light mode
+            if hasattr(self, 'ssh_current_dir_entry') and self.ssh_current_dir_entry:
+                self.ssh_current_dir_entry.config(readonlybackground='#F0F0F0', fg='#000000')
+            
             # Set root background
             self.root.configure(bg='#F0F0F0')
         
@@ -644,11 +716,345 @@ class PasswordCrackerApp:
         # Save settings immediately to ensure they persist
         self.save_window_config()
     
+    def _update_widget_theme(self, parent):
+        """Recursively update all widgets with the current theme"""
+        # Process all children
+        try:
+            for child in parent.winfo_children():
+                # Update based on widget type
+                widget_class = child.winfo_class()
+                
+                # Apply specific styling based on widget type
+                if widget_class == 'TLabelframe':
+                    bg_color = '#2E2E2E' if self.is_dark_mode.get() else '#F0F0F0'
+                    fg_color = '#FFFFFF' if self.is_dark_mode.get() else '#000000'
+                    child.configure(style='TLabelframe')
+                    
+                    # Process LabelFrame label
+                    for sub_child in child.winfo_children():
+                        if sub_child.winfo_class() == 'TLabel':
+                            sub_child.configure(style='TLabelframe.Label')
+                
+                elif widget_class == 'TButton':
+                    child.configure(style='TButton')
+                
+                elif widget_class == 'TCombobox':
+                    # Apply correct style to combobox
+                    if not isinstance(child, FixedCombobox):
+                        fg_color = '#FFFFFF' if self.is_dark_mode.get() else '#000000'
+                        child.configure(style='TCombobox', foreground=fg_color)
+                
+                elif widget_class == 'TCheckbutton':
+                    child.configure(style='TCheckbutton')
+                
+                elif widget_class == 'TEntry':
+                    child.configure(style='TEntry')
+                
+                elif widget_class == 'TScrollbar':
+                    child.configure(style='TScrollbar')
+                
+                # Recursively process all children
+                self._update_widget_theme(child)
+        except Exception as e:
+            print(f"Error in _update_widget_theme: {e}")
+    
+    def _fix_combobox_display(self):
+        """Fix combobox display issues after theme change"""
+        is_dark = self.is_dark_mode.get()
+        # Configure all tk optiondb settings for comboboxes
+        if is_dark:
+            self.root.tk.eval("""
+                option add *TCombobox*Listbox.background #3E3E3E
+                option add *TCombobox*Listbox.foreground #FFFFFF
+                option add *TCombobox*Listbox.selectBackground #4E4E4E
+                option add *TCombobox*Listbox.selectForeground #FFFFFF
+            """)
+        else:
+            self.root.tk.eval("""
+                option add *TCombobox*Listbox.background white
+                option add *TCombobox*Listbox.foreground black
+                option add *TCombobox*Listbox.selectBackground #0078D7
+                option add *TCombobox*Listbox.selectForeground white
+            """)
+    
+    def _update_all_comboboxes(self, is_dark):
+        """Update all FixedCombobox instances to reflect the current theme"""
+        # Update attack type combobox
+        if hasattr(self, 'office_attack_type') and isinstance(self.office_attack_type, FixedCombobox):
+            if is_dark:
+                self.office_attack_type.configure(foreground='white')
+            else:
+                self.office_attack_type.configure(foreground='black')
+        
+        # Update other comboboxes
+        for tab in [self.office_tab, self.pdf_tab, self.hash_tab, self.dictionary_tab]:
+            if tab:
+                for child in tab.winfo_children():
+                    if isinstance(child, ttk.LabelFrame):
+                        for grandchild in child.winfo_children():
+                            try:
+                                if isinstance(grandchild, FixedCombobox):
+                                    grandchild.update_theme(is_dark)
+                            except Exception:
+                                pass  # Skip widgets that can't be configured
+    
+    def setup_office_tab(self):
+        frame = ttk.LabelFrame(self.office_tab, text="Microsoft Office Document Cracking", padding="10")
+        frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        
+        ttk.Label(frame, text="Office Document:").grid(column=0, row=0, sticky=tk.W, padx=5, pady=5)
+        ttk.Entry(frame, textvariable=self.target_file_path, width=50).grid(column=1, row=0, sticky=tk.W, padx=5, pady=5)
+        ttk.Button(frame, text="Browse", command=lambda: self.browse_file([("Word Documents", "*.docx *.doc"),
+                                                                         ("Excel Documents", "*.xlsx *.xls"),
+                                                                         ("All Files", "*.*")])).grid(column=2, row=0, sticky=tk.W, padx=5, pady=5)
+        
+        ttk.Label(frame, text="Office Version:").grid(column=0, row=1, sticky=tk.W, padx=5, pady=5)
+        office_version = FixedCombobox(frame, is_dark_mode_var=self.is_dark_mode, values=["Office 2007", "Office 2010", "Office 2013", "Office 2016", "Office 2019", "Office 365"])
+        office_version.grid(column=1, row=1, sticky=tk.W, padx=5, pady=5)
+        office_version.current(5)  # Default to Office 365
+        
+        # Add attack type option
+        ttk.Label(frame, text="Attack Type:").grid(column=0, row=2, sticky=tk.W, padx=5, pady=3)
+        self.office_attack_type = FixedCombobox(frame, is_dark_mode_var=self.is_dark_mode, values=[
+            "Dictionary Attack",
+            "Bruteforce"
+        ])
+        self.office_attack_type.grid(column=1, row=2, sticky=tk.W, padx=5, pady=3)
+        self.office_attack_type.current(0)  # Default to Dictionary Attack
+        self.office_attack_type.bind("<<ComboboxSelected>>", self._on_office_attack_type_changed)
+        
+        self.office_crack_button = ttk.Button(frame, text="Start Cracking", command=lambda: self.toggle_cracking("office"))
+        self.office_crack_button.grid(column=1, row=3, sticky=tk.E, padx=5, pady=20)
+    
+    def setup_pdf_tab(self):
+        frame = ttk.LabelFrame(self.pdf_tab, text="PDF Document Cracking", padding="10")
+        frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        
+        ttk.Label(frame, text="PDF Document:").grid(column=0, row=0, sticky=tk.W, padx=5, pady=5)
+        ttk.Entry(frame, textvariable=self.target_file_path, width=50).grid(column=1, row=0, sticky=tk.W, padx=5, pady=5)
+        ttk.Button(frame, text="Browse", command=lambda: self.browse_file([("PDF Files", "*.pdf"), ("All Files", "*.*")])).grid(column=2, row=0, sticky=tk.W, padx=5, pady=5)
+        
+        # Add attack type option
+        ttk.Label(frame, text="Attack Type:").grid(column=0, row=1, sticky=tk.W, padx=5, pady=3)
+        self.pdf_attack_type = FixedCombobox(frame, is_dark_mode_var=self.is_dark_mode, values=[
+            "Dictionary Attack",
+            "Bruteforce"
+        ])
+        self.pdf_attack_type.grid(column=1, row=1, sticky=tk.W, padx=5, pady=3)
+        self.pdf_attack_type.current(0)  # Default to Dictionary Attack
+        
+        # PDF version selection remains for interface consistency
+        ttk.Label(frame, text="PDF Version:").grid(column=0, row=2, sticky=tk.W, padx=5, pady=5)
+        self.pdf_version_combobox = FixedCombobox(frame, is_dark_mode_var=self.is_dark_mode, values=[
+            "Acrobat 5.0 and later (PDF 1.4)",
+            "Acrobat 6.0 and later (PDF 1.5)",
+            "Acrobat 7.0 and later (PDF 1.6)",
+            "Acrobat 9.0 and later (PDF 1.7)"
+        ])
+        self.pdf_version_combobox.grid(column=1, row=2, sticky=tk.W, padx=5, pady=5)
+        self.pdf_version_combobox.current(3)
+        
+        # Custom function for PDF toggle that prevents options dialog during active cracking
+        def pdf_toggle_cracking():
+            if self.is_cracking:
+                # If already cracking, just stop without showing options
+                self.stop_cracking()
+            else:
+                # Otherwise start cracking as normal
+                self.toggle_cracking("pdf")
+        
+        self.pdf_crack_button = ttk.Button(frame, text="Start Cracking", command=pdf_toggle_cracking)
+        self.pdf_crack_button.grid(column=1, row=3, sticky=tk.E, padx=5, pady=20)
+    
+    def setup_hash_tab(self):
+        frame = ttk.LabelFrame(self.hash_tab, text="NTLM Hash Cracking", padding="10")
+        frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        
+        ttk.Label(frame, text="Hash File:").grid(column=0, row=0, sticky=tk.W, padx=5, pady=5)
+        ttk.Entry(frame, textvariable=self.target_file_path, width=50).grid(column=1, row=0, sticky=tk.W, padx=5, pady=5)
+        ttk.Button(frame, text="Browse", command=lambda: self.browse_file([("Hash Files", "*.hash *.hashes"), ("Text Files", "*.txt"), ("All Files", "*.*")])).grid(column=2, row=0, sticky=tk.W, padx=5, pady=5)
+        
+        ttk.Label(frame, text="Hash Type:").grid(column=0, row=1, sticky=tk.W, padx=5, pady=5)
+        self.hash_type_combo = FixedCombobox(frame, is_dark_mode_var=self.is_dark_mode, values=["NTLMv2", "NTLM", "NetNTLMv2", "NetNTLM"])
+        self.hash_type_combo.grid(column=1, row=1, sticky=tk.W, padx=5, pady=5)
+        self.hash_type_combo.current(2)  # Select NetNTLMv2 by default (index 2)
+        
+        # Add attack type option
+        ttk.Label(frame, text="Attack Type:").grid(column=0, row=2, sticky=tk.W, padx=5, pady=3)
+        self.hash_attack_type = FixedCombobox(frame, is_dark_mode_var=self.is_dark_mode, values=[
+            "Dictionary Attack",
+            "Bruteforce"
+        ])
+        self.hash_attack_type.grid(column=1, row=2, sticky=tk.W, padx=5, pady=3)
+        self.hash_attack_type.current(0)  # Default to Dictionary Attack
+        
+        self.hash_crack_button = ttk.Button(frame, text="Start Cracking", command=lambda: self.toggle_cracking("hash"))
+        self.hash_crack_button.grid(column=1, row=3, sticky=tk.E, padx=5, pady=20)
+    
+    def setup_about_tab(self):
+        """Set up the About tab with logo and developer information"""
+        frame = ttk.Frame(self.about_tab, padding="20")
+        frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
+        
+        # Logo display
+        logo_frame = ttk.Frame(frame)
+        logo_frame.pack(fill=tk.X, pady=10)
+        
+        # Create a placeholder logo label
+        logo_label = ttk.Label(logo_frame, text="P4wnForge")
+        logo_label.pack(anchor=tk.CENTER)
+        
+        try:
+            # Try to load the logo image
+            logo_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "P4wnForge.webp")
+            if os.path.exists(logo_path):
+                try:
+                    img = Image.open(logo_path)
+                    # Resize image if needed
+                    img = img.resize((200, 200), Image.LANCZOS)
+                    logo_img = ImageTk.PhotoImage(img)
+                    logo_label.config(image=logo_img, text="")
+                    logo_label.image = logo_img  # Keep a reference to prevent garbage collection
+                except Exception as e:
+                    print(f"Error processing logo image: {e}")
+        except Exception as e:
+            print(f"Error in logo setup: {e}")
+        
+        # About information
+        info_frame = ttk.Frame(frame)
+        info_frame.pack(fill=tk.BOTH, expand=True, pady=10)
+        
+        ttk.Label(info_frame, text="Advanced Password Recovery Tool", font=("Helvetica", 12)).pack(anchor=tk.CENTER)
+        ttk.Label(info_frame, text="Version 1.5.0").pack(anchor=tk.CENTER, pady=10)
+        
+        # Developer info
+        ttk.Label(info_frame, text="Developed by: Detective Aaron Cuddeback", font=("Helvetica", 10, "bold")).pack(anchor=tk.CENTER, pady=5)
+        ttk.Label(info_frame, text="Email: cuddebaa@edso.org").pack(anchor=tk.CENTER)
+        
+        # LinkedIn link
+        linkedin_link = ttk.Label(info_frame, text="LinkedIn", foreground="blue", cursor="hand2")
+        linkedin_link.pack(anchor=tk.CENTER, pady=2)
+        linkedin_link.bind("<Button-1>", lambda e: webbrowser.open("https://linkedin.com/in/aaroncu"))
+        
+        # Add hightech.png logo 
+        try:
+            hightech_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "hightech.png")
+            if os.path.exists(hightech_path):
+                hightech_img = Image.open(hightech_path)
+                # Resize image for appropriate display
+                hightech_img = hightech_img.resize((94, 94), Image.LANCZOS)
+                hightech_photo = ImageTk.PhotoImage(hightech_img)
+                hightech_label = ttk.Label(info_frame, image=hightech_photo)
+                hightech_label.image = hightech_photo  # Keep a reference to prevent garbage collection
+                hightech_label.pack(anchor=tk.CENTER, pady=10)
+        except Exception as e:
+            print(f"Error adding hightech logo: {e}")
+        
+        ttk.Label(info_frame, text="© 2023-2025 All Rights Reserved").pack(anchor=tk.CENTER, pady=10)
+        
+        # Legal disclaimer
+        disclaimer_frame = ttk.LabelFrame(frame, text="Legal Disclaimer")
+        disclaimer_frame.pack(fill=tk.X, expand=False, pady=10)
+        
+        disclaimer_text = ("This tool is provided for educational and professional security testing purposes only. "
+                           "Use responsibly and only on systems you own or have explicit permission to test. "
+                           "Unauthorized password cracking attempts may be illegal.")
+        
+        disclaimer_label = ttk.Label(disclaimer_frame, text=disclaimer_text, wraplength=500, justify=tk.LEFT)
+        disclaimer_label.pack(padx=10, pady=10)
+    
+    def setup_dictionary_tab(self):
+        """Set up the Dictionary Manager tab for managing wordlists"""
+        frame = ttk.LabelFrame(self.dictionary_tab, text="Dictionary File Manager", padding="10")
+        frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        
+        # Show the current dictionary directory
+        dict_dir = self._get_dictionary_directory()
+        dict_path_frame = ttk.Frame(frame)
+        dict_path_frame.pack(fill=tk.X, expand=False, pady=5)
+        ttk.Label(dict_path_frame, text="Dictionary Location:").pack(side=tk.LEFT, padx=5)
+        ttk.Label(dict_path_frame, text=dict_dir).pack(side=tk.LEFT, padx=5)
+        
+        # Dictionary list with scrollbar
+        list_frame = ttk.Frame(frame)
+        list_frame.pack(fill=tk.BOTH, expand=True, pady=5)
+        
+        scrollbar = ttk.Scrollbar(list_frame)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        self.dict_listbox = tk.Listbox(list_frame, height=10, width=60, yscrollcommand=scrollbar.set)
+        self.dict_listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.config(command=self.dict_listbox.yview)
+        
+        # Set initial colors based on theme
+        if self.is_dark_mode.get():
+            self.dict_listbox.config(bg='#1E1E1E', fg='#CCCCCC', selectbackground='#4E4E4E', selectforeground='#FFFFFF')
+        else:
+            self.dict_listbox.config(bg='#FFFFFF', fg='#000000', selectbackground='#0078D7', selectforeground='#FFFFFF')
+        
+        # Load available dictionary list into the UI
+        self.load_dictionary_list()
+        
+        # Button frame
+        button_frame = ttk.Frame(frame)
+        button_frame.pack(fill=tk.X, pady=10)
+        
+        add_button = ttk.Button(button_frame, text="Add Dictionary", command=self.add_dictionary)
+        add_button.pack(side=tk.LEFT, padx=5)
+        
+        remove_button = ttk.Button(button_frame, text="Remove Selected", command=self.remove_dictionary)
+        remove_button.pack(side=tk.LEFT, padx=5)
+        
+        use_button = ttk.Button(button_frame, text="Use Selected", command=self.use_dictionary)
+        use_button.pack(side=tk.LEFT, padx=5)
+        
+        # Dictionary testing
+        test_frame = ttk.LabelFrame(frame, text="Dictionary Statistics")
+        test_frame.pack(fill=tk.X, pady=10)
+        
+        ttk.Label(test_frame, text="Selected dictionary contains:").grid(row=0, column=0, sticky=tk.W, padx=5, pady=5)
+        self.dict_stats_label = ttk.Label(test_frame, text="No dictionary selected")
+        self.dict_stats_label.grid(row=0, column=1, sticky=tk.W, padx=5, pady=5)
+        
+        analyze_button = ttk.Button(test_frame, text="Analyze", command=self.analyze_dictionary)
+        analyze_button.grid(row=0, column=2, padx=5, pady=5)
+        
+        # Dictionary download section
+        download_frame = ttk.LabelFrame(frame, text="Download Common Dictionaries")
+        download_frame.pack(fill=tk.X, pady=10)
+        
+        common_dicts = [
+            "rockyou.txt (14.3 MB) - Most common passwords",
+            "10-million-password-list-top-1000000.txt (7.5 MB) - Common passwords",
+            "english-words.txt (4.2 MB) - English dictionary"
+        ]
+        
+        self.download_combo = FixedCombobox(download_frame, is_dark_mode_var=self.is_dark_mode, values=common_dicts, width=50)
+        self.download_combo.grid(row=0, column=0, padx=5, pady=5, sticky=tk.W)
+        self.download_combo.current(0)
+        
+        download_button = ttk.Button(download_frame, text="Download", command=self.download_dictionary)
+        download_button.grid(row=0, column=1, padx=5, pady=5)
+        
+        # Download progress bar (initially hidden)
+        progress_frame = ttk.Frame(download_frame)
+        progress_frame.grid(row=1, column=0, columnspan=2, sticky=tk.EW, padx=5, pady=5)
+        
+        self.download_status_label = ttk.Label(progress_frame, text="")
+        self.download_status_label.pack(anchor=tk.W, pady=(5, 0))
+        
+        self.download_progressbar = ttk.Progressbar(progress_frame, orient=tk.HORIZONTAL, length=400, mode='determinate')
+        self.download_progressbar.pack(fill=tk.X, pady=5)
+        
+        # Hide progress bar initially
+        self.download_progressbar.pack_forget()
+        self.download_status_label.pack_forget()
+    
     def load_dictionary_list(self):
         """Load the list of dictionaries and scan default locations"""
         # First, ensure the dictionaries file is defined
         if not hasattr(self, 'dictionaries_file'):
-            config_dir = os.path.join(os.path.expanduser("~"), ".passcrack")
+            config_dir = os.path.join(os.path.expanduser("~"), ".p4wnforge")
             os.makedirs(config_dir, exist_ok=True)
             self.dictionaries_file = os.path.join(config_dir, "dictionaries.json")
         
@@ -670,7 +1076,7 @@ class PasswordCrackerApp:
         try:
             # Ensure the dictionaries file is defined
             if not hasattr(self, 'dictionaries_file'):
-                config_dir = os.path.join(os.path.expanduser("~"), ".passcrack")
+                config_dir = os.path.join(os.path.expanduser("~"), ".p4wnforge")
                 os.makedirs(config_dir, exist_ok=True)
                 self.dictionaries_file = os.path.join(config_dir, "dictionaries.json")
                 
@@ -689,7 +1095,7 @@ class PasswordCrackerApp:
         try:
             # Ensure the dictionaries file is defined
             if not hasattr(self, 'dictionaries_file'):
-                config_dir = os.path.join(os.path.expanduser("~"), ".passcrack")
+                config_dir = os.path.join(os.path.expanduser("~"), ".p4wnforge")
                 os.makedirs(config_dir, exist_ok=True)
                 self.dictionaries_file = os.path.join(config_dir, "dictionaries.json")
                 
@@ -783,7 +1189,7 @@ class PasswordCrackerApp:
                 
             # If app directory isn't writable, fallback to user's home directory
             self.log_output("Warning: Cannot write to app directory, using fallback location")
-            dict_dir = os.path.join(os.path.expanduser("~"), ".passcrack", "dictionaries")
+            dict_dir = os.path.join(os.path.expanduser("~"), ".p4wnforge", "dictionaries")
             os.makedirs(dict_dir, exist_ok=True)
             
             if os.access(dict_dir, os.W_OK):
@@ -791,14 +1197,14 @@ class PasswordCrackerApp:
                 
             # Try Documents folder if home directory isn't writable
             documents_dir = os.path.join(os.path.expanduser("~"), "Documents")
-            dict_dir = os.path.join(documents_dir, "PassCrack_Dictionaries")
+            dict_dir = os.path.join(documents_dir, "P4wnForge_Dictionaries")
             os.makedirs(dict_dir, exist_ok=True)
             
             if os.access(dict_dir, os.W_OK):
                 return dict_dir
                 
             # Try Temp directory as final fallback
-            dict_dir = os.path.join(os.path.expanduser("~"), "AppData", "Local", "Temp", "PassCrack_Dictionaries")
+            dict_dir = os.path.join(os.path.expanduser("~"), "AppData", "Local", "Temp", "P4wnForge_Dictionaries")
             os.makedirs(dict_dir, exist_ok=True)
             
             if os.access(dict_dir, os.W_OK):
@@ -1100,16 +1506,32 @@ class PasswordCrackerApp:
             self.password_list_path.set(filename)
     
     def browse_file(self, filetypes):
+        # Get current tab to determine initial directory
+        current_tab = self.tab_control.tab(self.tab_control.select(), "text").lower()
+        
+        # Set initial directory based on current tab
+        if current_tab == "ntlm hash":
+            # For NTLM hash tab, default to the hashes/ntlm directory
+            hashes_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "hashes")
+            ntlm_dir = os.path.join(hashes_dir, "ntlm")
+            # Create the directory if it doesn't exist
+            os.makedirs(ntlm_dir, exist_ok=True)
+            initial_dir = ntlm_dir
+        else:
+            # For other tabs, no specific initial directory
+            initial_dir = None
+        
         filename = filedialog.askopenfilename(
             title="Select Target File",
+            initialdir=initial_dir,
             filetypes=filetypes
         )
         if filename:
             self.target_file_path.set(filename)
-            self.current_tab = self.tab_control.tab(self.tab_control.select(), "text").lower()
+            self.current_tab = current_tab
     
     def find_extraction_tool(self, tool_name):
-        """Search for extraction tools (office2john.py or pdf2john.py) in common locations."""
+        """Search for extraction tools (office2john.py or pdfbrute.py) in common locations."""
         search_paths = [
             os.path.dirname(self.hashcat_path) if self.hashcat_path else "",
             os.getcwd(),
@@ -1141,7 +1563,7 @@ class PasswordCrackerApp:
         return None
     
     def check_john_tools(self):
-        self.log_output("Checking for hash extraction tools...")
+        self.log_output("Checking for extraction tools...")
         search_paths = [
             os.path.dirname(self.hashcat_path) if self.hashcat_path else "",
             os.getcwd(),
@@ -1155,29 +1577,37 @@ class PasswordCrackerApp:
                 search_paths.append(path)
         
         office2john_found = False
-        pdf2john_found = False
+        pdfbrute_found = False
         
         for path in search_paths:
             if not path:
                 continue
             office2john_path = os.path.join(path, "office2john.py")
-            pdf2john_path = os.path.join(path, "pdf2john.py")
+            pdfbrute_path = os.path.join(path, "pdfbrute.py")
+            
             if os.path.exists(office2john_path) and not office2john_found:
                 self.log_output(f"✓ Found office2john.py at: {office2john_path}")
                 office2john_found = True
-            if os.path.exists(pdf2john_path) and not pdf2john_found:
-                self.log_output(f"✓ Found pdf2john.py at: {pdf2john_path}")
-                pdf2john_found = True
-            if office2john_found and pdf2john_found:
+                
+            # Check for current directory pdfbrute.py
+            if path == os.getcwd():
+                pdfbrute_path = os.path.join(path, "pdfbrute.py")
+                if os.path.exists(pdfbrute_path) and not pdfbrute_found:
+                    self.log_output(f"✓ Found pdfbrute.py at: {pdfbrute_path}")
+                    pdfbrute_found = True
+            
+            if office2john_found and pdfbrute_found:
                 break
         
         if not office2john_found:
             self.log_output("✗ office2john.py not found. Office document cracking may be less effective.")
             self.log_output("  Download from: https://raw.githubusercontent.com/openwall/john/bleeding-jumbo/run/office2john.py")
-        if not pdf2john_found:
-            self.log_output("✗ pdf2john.py not found. PDF cracking may be less effective.")
-            self.log_output("  Download from: https://raw.githubusercontent.com/openwall/john/bleeding-jumbo/run/pdf2john.py")
-        self.log_output("Hash extraction tools check completed.")
+            
+        if not pdfbrute_found:
+            self.log_output("✗ pdfbrute.py not found. PDF bruteforce capabilities will be limited.")
+            self.log_output("  Make sure pdfbrute.py is in the application directory for enhanced PDF cracking.")
+            
+        self.log_output("Extraction tools check completed.")
     
     def find_john_the_ripper(self):
         try:
@@ -1251,10 +1681,23 @@ class PasswordCrackerApp:
         elif current_tab == "NTLM Hash" and hasattr(self, 'hash_attack_type'):
             is_bruteforce = self.hash_attack_type.get() == "Bruteforce"
         
-        # If we're using bruteforce, prompt for password length
+        # If we're using bruteforce, prompt for options
         if is_bruteforce:
-            if not self.prompt_bruteforce_length():
-                return  # User cancelled the operation
+            # For PDF tab, use the PDF-specific bruteforce options dialog
+            if current_tab == "PDF Documents":
+                # Set the UI to cracking state before showing the options dialog
+                # This will change the button to "Stop Cracking"
+                self.is_cracking = True
+                self.update_crack_buttons("Stop Cracking")
+                
+                # PDF bruteforce settings are handled in the _crack_pdf method
+                # The _crack_pdf method will reset the state if the user cancels in the dialog
+                self._crack_pdf()
+                return
+            else:
+                # For other tabs, use the generic bruteforce options
+                if not self.prompt_bruteforce_length():
+                    return  # User cancelled the operation
         
         # Only check for password list if not using bruteforce
         if not is_bruteforce and not self.password_list_path.get():
@@ -1279,7 +1722,7 @@ class PasswordCrackerApp:
     
     def stop_cracking(self):
         """Stop the currently running cracking process"""
-        if self.cracking_process and self.cracking_process.poll() is None:
+        if self.cracking_process and hasattr(self.cracking_process, 'poll') and self.cracking_process.poll() is None:
             self.log_output("Stopping cracking process...")
             if sys.platform == "win32":
                 # On Windows, we need to use taskkill to kill the process and its children
@@ -1294,6 +1737,17 @@ class PasswordCrackerApp:
                     self.cracking_process.kill()
             
             self.log_output("Cracking process stopped by user.")
+        elif isinstance(self.cracking_process, threading.Thread) and self.cracking_process.is_alive():
+            # For threaded processes (like PDF bruteforce)
+            self.log_output("Stopping PDF bruteforce process...")
+            self.is_cracking = False  # This flag is checked in the thread loop
+            
+            # Set the stopped flag in the PDFBruteForcer instance if it exists
+            if hasattr(self, 'pdf_brute_forcer') and self.pdf_brute_forcer is not None:
+                self.pdf_brute_forcer.stopped = True
+                self.log_output("Signaled PDF bruteforce to stop.")
+            
+            self.log_output("PDF bruteforce process stopped by user.")
         
         # Reset the cracking state
         self.is_cracking = False
@@ -1435,7 +1889,13 @@ class PasswordCrackerApp:
             if mode == "office":
                 self._crack_office()
             elif mode == "pdf":
-                self._crack_pdf()
+                # PDF bruteforce with options dialog is handled directly from start_cracking
+                # This path is for non-bruteforce PDF cracking (dictionary attack)
+                if not self.is_cracking:
+                    # This means start_cracking has already handled it (PDF bruteforce case)
+                    return
+                else:
+                    self._crack_pdf()
             elif mode == "hash":
                 self._crack_hash()
         finally:
@@ -1583,6 +2043,8 @@ class PasswordCrackerApp:
                     self.log_output("Password cracking completed successfully!", is_password=True)
                     self.log_output(f"PASSWORD FOUND: {recovered_password}", is_password=True)
                     self._save_cracked_password(target_file, recovered_password)
+                    # Show success message box
+                    messagebox.showinfo("Success!", f"Password found: {recovered_password}")
                 else:
                     self.log_output("Password not found or could not parse output.", is_password=True)
         except Exception as e:
@@ -1590,11 +2052,16 @@ class PasswordCrackerApp:
             self.log_output("Command that failed: " + " ".join(command))
     
     def _crack_pdf(self):
-        # PDF cracking method using pdf2john and hashcat
+        # PDF cracking method using PyMuPDF (fitz) and hash extraction
         pdf_path = self.target_file_path.get().strip()
+        wordlist_path = self.password_list_path.get().strip()
         
         if not pdf_path:
-            messagebox.showerror("Error", "Please select a PDF file to crack")
+            messagebox.showerror("Error", "Please select a PDF file!")
+            # Reset the button if we can't proceed
+            if self.is_cracking:
+                self.is_cracking = False
+                self.update_crack_buttons("Start Cracking")
             return
         
         # Create hashes directory structure if it doesn't exist
@@ -1610,160 +2077,138 @@ class PasswordCrackerApp:
         # Check if using bruteforce mode
         is_bruteforce = self.pdf_attack_type.get() == "Bruteforce" if hasattr(self, 'pdf_attack_type') else False
         
-        # PDF hash mode for hashcat is 10500 (PDF 1.1-1.3) or 10600 (PDF 1.4-1.6)
-        # Use 10700 as a more universal option that handles different PDF versions
-        pdf_hash_mode = "10700"
-        command = [self.hashcat_path if os.path.dirname(self.hashcat_path)
-                   else ("hashcat.exe" if sys.platform=="win32" else "hashcat")]
-        
-        try:
-            self.log_output("Extracting hash from PDF document...")
-            pdf2john_path = self.find_extraction_tool("pdf2john.py")
-            if pdf2john_path:
-                self.log_output(f"Using pdf2john.py at {pdf2john_path} to extract hash...")
-                extract_cmd = [sys.executable, pdf2john_path, pdf_path]
-                result = subprocess.run(extract_cmd, capture_output=True, text=True)
-                raw_output = result.stdout.strip()
-                self.log_output(f"Raw hash output: {raw_output[:50]}...")
-                
-                # Save the hash
-                with open(hash_file, 'w') as f:
-                    f.write(raw_output)
-                self.log_output(f"Hash extracted to {hash_file}")
-                
-                if is_bruteforce:
-                    # Use bruteforce attack (attack mode 3) with a mask
-                    # Create a mask based on the user-specified options
-                    mask = self.get_bruteforce_mask()
-                    max_length = self.bruteforce_length.get()
-                    
-                    # Get the character set description for logging
-                    char_sets = []
-                    if self.use_lowercase.get(): char_sets.append("lowercase")
-                    if self.use_uppercase.get(): char_sets.append("uppercase")
-                    if self.use_digits.get(): char_sets.append("numbers")
-                    if self.use_special.get(): char_sets.append("special chars")
-                    
-                    command.extend(["-m", pdf_hash_mode, "-a", "3", hash_file, mask, "--increment"])
-                    self.log_output(f"Using bruteforce with mask: {mask} (max length: {max_length}, character sets: {', '.join(char_sets)})", "info")
-                    
-                    # Add optimizations for bruteforce
-                    command.extend(["--workload-profile", "3"])  # Better performance
-                    command.extend(["--optimized-kernel-enable"])
-                    
-                    # For bruteforce, use stdin pipe for possible interactive use
-                    use_pipe = True
-                    self.log_output("Note: This may take a long time for complex passwords!", "warning")
-                else:
-                    # Use dictionary attack (attack mode 0)
-                    wordlist_path = self.password_list_path.get().strip()
-                    if not wordlist_path:
-                        messagebox.showerror("Error", "Please select a wordlist file for dictionary attack")
-                        return
-                    
-                    command.extend(["-m", pdf_hash_mode, "-a", "0", hash_file, wordlist_path])
-                    use_pipe = False
-                
-                # Redirect output to a file in the same directory as the hash
-                outfile_path = os.path.join(pdf_hashes_dir, f"{os.path.splitext(target_filename)[0]}_cracked.txt").replace('\\', '/')
-                command.extend(["--outfile", outfile_path])
-                if "--force" not in command:
-                    command.append("--force")
-                
-                self.log_output(f"Executing command: {' '.join(command)}")
-                hashcat_dir = os.path.dirname(self.hashcat_path) if os.path.dirname(self.hashcat_path) else None
-                
-                try:
-                    if use_pipe:
-                        self.cracking_process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, 
-                                                                stdin=subprocess.PIPE, text=True, bufsize=1, cwd=hashcat_dir)
-                    else:
-                        self.cracking_process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, 
-                                                                text=True, bufsize=1, cwd=hashcat_dir)
-                    
-                    for line in iter(self.cracking_process.stdout.readline, ''):
-                        if not self.is_cracking:  # If process was stopped by user
-                            break
-                        self.log_output(line.strip())
-                    
-                    if self.is_cracking:  # Only process output if we haven't been manually stopped
-                        self.cracking_process.wait()
-                        # Run --show command to retrieve the password
-                        show_cmd = [self.hashcat_path, "-m", pdf_hash_mode, "--show", hash_file]
-                        self.log_output(f"Executing show command: {' '.join(show_cmd)}")
-                        show_result = subprocess.run(show_cmd, capture_output=True, text=True, cwd=hashcat_dir)
-                        
-                        self.log_output("Show command output:")
-                        self.log_output(show_result.stdout)
-                        
-                        recovered_password = None
-                        for line in show_result.stdout.splitlines():
-                            if ":" in line:
-                                parts = line.split(":", 1)
-                                if len(parts) > 1 and parts[1].strip():
-                                    recovered_password = parts[1].strip()
-                                    break
-                        
-                        if recovered_password:
-                            self.log_output("Password cracking completed successfully!", is_password=True)
-                            self.log_output(f"PASSWORD FOUND: {recovered_password}", is_password=True)
-                            self._save_cracked_password(pdf_path, recovered_password)
-                        else:
-                            self.log_output("Password not found or could not parse output.", is_password=True)
-                    return
-                except Exception as e:
-                    self.log_output(f"Error executing hashcat command: {str(e)}")
-                    self.log_output("Command that failed: " + " ".join(command))
-            except Exception as e:
-                self.log_output(f"Error in PDF hash extraction: {str(e)}")
-                messagebox.showerror("Error", f"An error occurred during PDF hash extraction: {str(e)}")
-        else:
-            self.log_output("pdf2john.py not found. Cannot extract hash.", "error")
-            messagebox.showerror("Error", "pdf2john.py tool is required but not found")
-            return
-    
-    def _crack_hash(self):
-        target_file = self.target_file_path.get()
-        
-        # Create hashes directory structure if it doesn't exist
-        hashes_root = os.path.join(os.path.dirname(os.path.abspath(__file__)), "hashes")
-        ntlm_hashes_dir = os.path.join(hashes_root, "ntlm")
-        os.makedirs(ntlm_hashes_dir, exist_ok=True)
-        
-        # Generate a unique hash filename based on the target file name
-        target_filename = os.path.basename(target_file) if os.path.exists(target_file) else "hash_input.txt"
-        hash_filename = f"{os.path.splitext(target_filename)[0]}_processed.txt"
-        hash_file = os.path.join(ntlm_hashes_dir, hash_filename)
-        
-        # Check if using bruteforce mode
-        is_bruteforce = self.hash_attack_type.get() == "Bruteforce" if hasattr(self, 'hash_attack_type') else False
-        
-        # Copy or prepare the hash file
-        if os.path.exists(target_file):
-            # Copy the hash file to our hashes directory
-            with open(target_file, 'r') as src_file:
-                hash_content = src_file.read().strip()
-            
-            with open(hash_file, 'w') as dest_file:
-                dest_file.write(hash_content)
-            
-            self.log_output(f"Hash file copied to {hash_file}")
-        else:
-            # If target_file doesn't exist, it might be direct hash input
-            hash_content = target_file.strip()
-            with open(hash_file, 'w') as f:
-                f.write(hash_content)
-            self.log_output(f"Hash saved to {hash_file}")
-        
-        # Determine the hash type - default to NTLM (1000)
-        hash_mode = "1000"  # Default to NTLM
-        
-        # Set up the hashcat command
-        command = [self.hashcat_path if os.path.dirname(self.hashcat_path)
-                   else ("hashcat.exe" if sys.platform=="win32" else "hashcat")]
-        
+        # We'll only open this path during direct button clicks, not from _run_cracking_process 
+        # since we're handling that separately now
         if is_bruteforce:
-            # Use bruteforce attack (attack mode 3) with a mask
+            self.log_output("Using bruteforce attack mode for PDF", "info")
+            
+            # Check if PDFBruteForcer is available
+            if PDFBruteForcer is None:
+                self.log_output("Error: PDFBruteForcer not available. Using fallback method.")
+                messagebox.showerror("Error", "PDF bruteforce module not available. Using fallback method.")
+                # Fall back to the existing bruteforce method
+                self._crack_pdf_hashcat_bruteforce(pdf_path, hash_file)
+                return
+                
+            # Prompt for PDF-specific bruteforce options
+            options = self.prompt_pdf_bruteforce_options()
+            if not options:
+                self.log_output("PDF bruteforce cancelled by user.")
+                # The on_cancel method in the options dialog will reset the button state
+                return
+            
+            # Set up PDFBruteForcer
+            options['progress_file'] = os.path.join(pdf_hashes_dir, f"{os.path.splitext(target_filename)[0]}_progress.json")
+            
+            # Configure PDFBruteForcer to use our logging function
+            options['log_function'] = lambda msg: self.root.after(10, lambda: self.log_output(msg))
+            
+            # Variable to store the brute forcer instance
+            self.pdf_brute_forcer = None
+            
+            # Create a thread to run the bruteforce process
+            def run_pdf_bruteforce():
+                try:
+                    self.log_output(f"Starting PDF bruteforce with {options['library']} library...")
+                    self.log_output(f"Password length: {options['min_length']} to {options['max_length']} characters")
+                    self.log_output(f"Character set: {options['charset']}")
+                    
+                    # Initialize PDFBruteForcer with our logging function
+                    self.pdf_brute_forcer = PDFBruteForcer(pdf_path, options)
+                    
+                    # Run the bruteforce attack
+                    try:
+                        success = self.pdf_brute_forcer.run()
+                        
+                        if not self.is_cracking:  # If stopped by user
+                            self.log_output("PDF bruteforce stopped by user.")
+                            return
+                        
+                        if success and self.pdf_brute_forcer.found_password:
+                            self.log_output(f"PDF password cracking completed successfully!", is_password=True)
+                            self.log_output(f"PASSWORD FOUND: {self.pdf_brute_forcer.found_password}", is_password=True)
+                            self._save_cracked_password(pdf_path, self.pdf_brute_forcer.found_password)
+                            # Show success message box
+                            messagebox.showinfo("Success!", f"Password found: {self.pdf_brute_forcer.found_password}")
+                        else:
+                            self.log_output("Password not found. Exhausted all combinations.", is_password=True)
+                    except KeyboardInterrupt:
+                        self.log_output("PDF bruteforce stopped by user.")
+                    except Exception as e:
+                        self.log_output(f"Error in PDF bruteforce: {str(e)}")
+                except Exception as e:
+                    self.log_output(f"Error initializing PDF bruteforce: {str(e)}")
+                
+                # Reset the cracking state after completion (only if not already done by user stopping)
+                if self.is_cracking:
+                    self.is_cracking = False
+                    self.root.after(0, lambda: self.update_crack_buttons("Start Cracking"))
+            
+            # Start the bruteforce process in a thread
+            self.log_output("Starting PDF bruteforce thread...")
+            self.cracking_process = threading.Thread(target=run_pdf_bruteforce)
+            self.cracking_process.daemon = True
+            self.cracking_process.start()
+            return
+            
+        # Non-bruteforce (dictionary attack) case
+        # At this point, we know we're doing a dictionary attack, so require wordlist
+        if not wordlist_path:
+            messagebox.showerror("Error", "Please select a wordlist for dictionary attack!")
+            # Reset the button if we can't proceed
+            if self.is_cracking:
+                self.is_cracking = False
+                self.update_crack_buttons("Start Cracking")
+            return
+        
+        # If not bruteforce, use dictionary attack with PyMuPDF
+        try:
+            with open(wordlist_path, "r", encoding="latin-1", errors='ignore') as f:
+                passwords = f.readlines()
+            
+            pdf_doc = fitz.open(pdf_path)
+            found = False
+            for password in passwords:
+                if not self.is_cracking:  # Check if process was stopped
+                    break
+                
+                password = password.strip()
+                self.log_output(f"Trying password: {password}")
+                self.root.update()  # Allow GUI to update
+                
+                if pdf_doc.authenticate(password):
+                    messagebox.showinfo("Success!", f"Password found: {password}")
+                    self.log_output(f"PDF password cracking completed successfully! PASSWORD FOUND: {password}", is_password=True)
+                    self._save_cracked_password(pdf_path, password)
+                    found = True
+                    break
+            
+            if self.is_cracking and not found:  # Only show message if we weren't manually stopped
+                messagebox.showerror("Failed", "No password in dictionary matched!")
+                self.log_output("No password in dictionary matched!")
+        except Exception as e:
+            messagebox.showerror("Error", f"An error occurred: {e}")
+            self.log_output(f"Error in PDF cracking: {e}")
+    
+    def _crack_pdf_hashcat_bruteforce(self, pdf_path, hash_file):
+        """Fallback method using hashcat for PDF bruteforce if PDFBruteForcer is not available"""
+        target_filename = os.path.basename(pdf_path)
+        pdf_hashes_dir = os.path.dirname(hash_file)
+        
+        # Use direct hashcat PDF cracking approach
+        try:
+            self.log_output("Using direct hashcat method for PDF bruteforce...")
+            
+            # Create a simple hash file with the PDF file path
+            with open(hash_file, 'w') as f:
+                f.write(pdf_path)
+            
+            # Use hashcat to crack the PDF directly
+            command = [self.hashcat_path if os.path.dirname(self.hashcat_path)
+                      else ("hashcat.exe" if sys.platform=="win32" else "hashcat")]
+            
+            # PDF hash mode for hashcat is 10500 (PDF 1.1-1.3) or 10600 (PDF 1.4-1.6)
+            # Use 10700 as a more universal option that handles different PDF versions
             # Create a mask based on the user-specified options
             mask = self.get_bruteforce_mask()
             max_length = self.bruteforce_length.get()
@@ -1775,41 +2220,32 @@ class PasswordCrackerApp:
             if self.use_digits.get(): char_sets.append("numbers")
             if self.use_special.get(): char_sets.append("special chars")
             
-            command.extend(["-m", hash_mode, "-a", "3", hash_file, mask, "--increment"])
+            command.extend(["-m", "10700", "-a", "3", hash_file, mask, "--increment"])
             self.log_output(f"Using bruteforce with mask: {mask} (max length: {max_length}, character sets: {', '.join(char_sets)})", "info")
-        else:
-            # Use dictionary attack (attack mode 0)
-            command.extend(["-m", hash_mode, "-a", "0", hash_file, self.password_list_path.get()])
-            use_pipe = False
-        
-        # Set output file in the hashes directory
-        outfile_path = os.path.join(ntlm_hashes_dir, f"{os.path.splitext(target_filename)[0]}_cracked.txt").replace('\\', '/')
-        command.extend(["--outfile", outfile_path])
-        
-        if "--force" not in command:
-            command.append("--force")
             
-        self.log_output(f"Executing command: {' '.join(command)}")
-        hashcat_dir = os.path.dirname(self.hashcat_path) if os.path.dirname(self.hashcat_path) else None
-        
-        try:
-            if use_pipe:
-                self.cracking_process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, 
-                                                       stdin=subprocess.PIPE, text=True, bufsize=1, cwd=hashcat_dir)
-            else:
-                self.cracking_process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, 
-                                                       text=True, bufsize=1, cwd=hashcat_dir)
-                
+            # Add optimizations for bruteforce
+            command.extend(["--workload-profile", "3"])  # Better performance
+            command.extend(["--optimized-kernel-enable"])
+            
+            # Redirect output to a file in the same directory as the hash
+            outfile_path = os.path.join(pdf_hashes_dir, f"{os.path.splitext(target_filename)[0]}_cracked.txt").replace('\\', '/')
+            command.extend(["--outfile", outfile_path, "--force"])
+            
+            self.log_output(f"Executing command: {' '.join(command)}")
+            hashcat_dir = os.path.dirname(self.hashcat_path) if os.path.dirname(self.hashcat_path) else None
+            
+            self.cracking_process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, 
+                                                    stdin=subprocess.PIPE, text=True, bufsize=1, cwd=hashcat_dir)
+            
             for line in iter(self.cracking_process.stdout.readline, ''):
                 if not self.is_cracking:  # If process was stopped by user
                     break
                 self.log_output(line.strip())
             
-            if self.is_cracking:  # Only show completion message if not manually stopped
+            if self.is_cracking:  # Only process output if we haven't been manually stopped
                 self.cracking_process.wait()
-                
                 # Run --show command to retrieve the password
-                show_cmd = [self.hashcat_path, "-m", hash_mode, "--show", hash_file]
+                show_cmd = [self.hashcat_path, "-m", "10700", "--show", hash_file]
                 self.log_output(f"Executing show command: {' '.join(show_cmd)}")
                 show_result = subprocess.run(show_cmd, capture_output=True, text=True, cwd=hashcat_dir)
                 
@@ -1827,9 +2263,517 @@ class PasswordCrackerApp:
                 if recovered_password:
                     self.log_output("Password cracking completed successfully!", is_password=True)
                     self.log_output(f"PASSWORD FOUND: {recovered_password}", is_password=True)
-                    self._save_cracked_password(target_file, recovered_password)
+                    self._save_cracked_password(pdf_path, recovered_password)
+                    # Show success message box
+                    messagebox.showinfo("Success!", f"Password found: {recovered_password}")
                 else:
                     self.log_output("Password not found or could not parse output.", is_password=True)
+            return
+        except Exception as e:
+            self.log_output(f"Error in PDF hash extraction: {str(e)}")
+            messagebox.showerror("Error", f"Error extracting PDF hash: {str(e)}")
+    
+    def prompt_pdf_bruteforce_options(self):
+        """Display a dialog for PDF-specific bruteforce settings"""
+        # Create a dialog with ttk styling to match the application
+        options = {}
+        
+        # Create a dialog window
+        dialog = tk.Toplevel(self.root)
+        dialog.title("PDF Bruteforce Settings")
+        
+        # Set a fixed size with reasonable dimensions
+        dialog.geometry("450x600")
+        dialog.resizable(False, False)
+        
+        # Apply theme
+        bg_color = '#2E2E2E' if self.is_dark_mode.get() else '#F0F0F0'
+        dialog.configure(bg=bg_color)
+        
+        # Create variables for options
+        min_length_var = tk.IntVar(value=1)
+        max_length_var = tk.IntVar(value=8)
+        charset_var = tk.StringVar(value="digits")
+        use_digits_var = tk.BooleanVar(value=True)
+        use_lower_var = tk.BooleanVar(value=False)
+        use_upper_var = tk.BooleanVar(value=False)
+        use_special_var = tk.BooleanVar(value=False)
+        library_var = tk.StringVar(value=AVAILABLE_LIBRARIES[0][0] if AVAILABLE_LIBRARIES else "")
+        
+        # Main content frame with ttk styling
+        main_frame = ttk.Frame(dialog, padding=(15, 10))
+        main_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # Title with ttk styling
+        ttk.Label(main_frame, text="PDF Bruteforce Settings", 
+                font=("Helvetica", 12, "bold")).pack(anchor=tk.W, pady=(0, 15))
+        
+        # Password length section
+        length_frame = ttk.LabelFrame(main_frame, text="Password Length", padding=(10, 5))
+        length_frame.pack(fill=tk.X, pady=8)
+        
+        # Min length
+        min_frame = ttk.Frame(length_frame)
+        min_frame.pack(fill=tk.X, padx=10, pady=3)
+        ttk.Label(min_frame, text="Minimum Length:").grid(row=0, column=0, sticky=tk.W, padx=5)
+        ttk.Spinbox(min_frame, from_=1, to=12, textvariable=min_length_var, width=5).grid(row=0, column=1, sticky=tk.W, padx=5)
+        
+        # Max length
+        max_frame = ttk.Frame(length_frame)
+        max_frame.pack(fill=tk.X, padx=10, pady=3)
+        ttk.Label(max_frame, text="Maximum Length:").grid(row=0, column=0, sticky=tk.W, padx=5)
+        ttk.Spinbox(max_frame, from_=1, to=12, textvariable=max_length_var, width=5).grid(row=0, column=1, sticky=tk.W, padx=5)
+        
+        # Character set section with ttk styling
+        charset_frame = ttk.LabelFrame(main_frame, text="Character Set", padding=(10, 5))
+        charset_frame.pack(fill=tk.X, pady=8)
+        
+        # Character set options
+        ttk.Radiobutton(charset_frame, text="Digits only (0-9)", 
+                       variable=charset_var, value="digits").pack(anchor=tk.W, padx=10, pady=2)
+        
+        ttk.Radiobutton(charset_frame, text="Letters (a-z, A-Z)", 
+                       variable=charset_var, value="letters").pack(anchor=tk.W, padx=10, pady=2)
+        
+        ttk.Radiobutton(charset_frame, text="Alphanumeric (letters + digits)", 
+                       variable=charset_var, value="alphanum").pack(anchor=tk.W, padx=10, pady=2)
+        
+        ttk.Radiobutton(charset_frame, text="All characters (including symbols)", 
+                       variable=charset_var, value="all").pack(anchor=tk.W, padx=10, pady=2)
+        
+        # Custom charset option
+        custom_radio = ttk.Radiobutton(charset_frame, text="Custom combination:", 
+                                      variable=charset_var, value="custom")
+        custom_radio.pack(anchor=tk.W, padx=10, pady=(8, 2))
+        
+        # Custom charset checkboxes in their own frame
+        custom_frame = ttk.Frame(charset_frame, padding=(20, 0, 0, 0))
+        custom_frame.pack(fill=tk.X, pady=2)
+        
+        # Two columns for checkboxes
+        ttk.Checkbutton(custom_frame, text="Digits (0-9)", 
+                       variable=use_digits_var).grid(row=0, column=0, sticky=tk.W, padx=5, pady=2)
+        
+        ttk.Checkbutton(custom_frame, text="Lowercase (a-z)", 
+                       variable=use_lower_var).grid(row=0, column=1, sticky=tk.W, padx=5, pady=2)
+        
+        ttk.Checkbutton(custom_frame, text="Uppercase (A-Z)", 
+                       variable=use_upper_var).grid(row=1, column=0, sticky=tk.W, padx=5, pady=2)
+        
+        ttk.Checkbutton(custom_frame, text="Symbols (!@#$...)", 
+                       variable=use_special_var).grid(row=1, column=1, sticky=tk.W, padx=5, pady=2)
+        
+        # Library section with ttk styling
+        library_frame = ttk.LabelFrame(main_frame, text="PDF Library", padding=(10, 5))
+        library_frame.pack(fill=tk.X, pady=8)
+        
+        # Create combobox for library selection
+        if AVAILABLE_LIBRARIES:
+            ttk.Label(library_frame, text="Select library:").pack(anchor=tk.W, padx=10, pady=2)
+            library_combo = ttk.Combobox(library_frame, textvariable=library_var, 
+                                       values=[lib for lib, _ in AVAILABLE_LIBRARIES],
+                                       state="readonly", width=30)
+            library_combo.pack(anchor=tk.W, padx=10, pady=2)
+            library_combo.current(0)
+        else:
+            ttk.Label(library_frame, text="No PDF libraries available", 
+                    foreground="red").pack(padx=10, pady=5)
+        
+        # Warning message with ttk styling
+        warning_frame = ttk.Frame(main_frame)
+        warning_frame.pack(fill=tk.X, pady=10)
+        warning_label = ttk.Label(warning_frame, 
+                                text="Warning: Higher values and more character sets\nwill significantly increase cracking time.",
+                                foreground="red")
+        warning_label.pack(anchor=tk.W)
+        
+        # Result variable
+        result = [None]
+        
+        # Create a more subtle but still visible button container
+        button_container = ttk.Frame(dialog, padding=(15, 10, 15, 15))
+        button_container.pack(side=tk.BOTTOM, fill=tk.X)
+        
+        # Add a separator above the buttons for visual distinction
+        ttk.Separator(dialog, orient='horizontal').pack(side=tk.BOTTOM, fill=tk.X, before=button_container)
+        
+        # Button callbacks
+        def on_ok():
+            # Validate settings
+            min_len = min_length_var.get()
+            max_len = max_length_var.get()
+            
+            if min_len > max_len:
+                messagebox.showerror("Error", "Minimum length cannot be greater than maximum length")
+                return
+                
+            # Construct custom charset if selected
+            charset = charset_var.get()
+            if charset == "custom":
+                custom_charset = ""
+                if use_digits_var.get(): custom_charset += "d"
+                if use_lower_var.get(): custom_charset += "l"
+                if use_upper_var.get(): custom_charset += "u" 
+                if use_special_var.get(): custom_charset += "s"
+                
+                if not custom_charset:
+                    messagebox.showerror("Error", "Please select at least one character set")
+                    return
+                    
+                charset = custom_charset
+            
+            # Construct options
+            options = {
+                'min_length': min_len,
+                'max_length': max_len,
+                'charset': charset,
+                'library': library_var.get(),
+                'save_progress': True,
+                'show_progress_every': 1000
+            }
+            
+            # Keep the button in "Stop Cracking" state because we're proceeding with cracking
+            # The is_cracking flag should already be set to True before this dialog opened
+            
+            result[0] = options
+            dialog.destroy()
+                
+        def on_cancel():
+            # Reset the cracking state since the user is cancelling
+            self.is_cracking = False
+            self.update_crack_buttons("Start Cracking")
+            
+            result[0] = None
+            dialog.destroy()
+        
+        # Normal sized ttk buttons but with sufficient padding
+        ok_button = ttk.Button(button_container, text="Start Bruteforce", command=on_ok, width=16)
+        ok_button.pack(side=tk.LEFT, padx=(0, 5), pady=5)
+        
+        cancel_button = ttk.Button(button_container, text="Cancel", command=on_cancel, width=16)
+        cancel_button.pack(side=tk.RIGHT, padx=(5, 0), pady=5)
+        
+        # Make the dialog modal
+        dialog.transient(self.root)
+        dialog.grab_set()
+        dialog.focus_set()
+        
+        # Wait for the dialog to be closed
+        self.root.wait_window(dialog)
+        
+        # Return the options
+        return result[0]
+    
+    def _crack_hash(self):
+        target_file = self.target_file_path.get()
+        
+        # Create hashes directory structure if it doesn't exist
+        hashes_root = os.path.join(os.path.dirname(os.path.abspath(__file__)), "hashes")
+        ntlm_hashes_dir = os.path.join(hashes_root, "ntlm")
+        os.makedirs(ntlm_hashes_dir, exist_ok=True)
+        
+        # Generate a unique hash filename based on the target file name
+        target_filename = os.path.basename(target_file) if os.path.exists(target_file) else "hash_input.txt"
+        hash_filename = f"{os.path.splitext(target_filename)[0]}_processed.txt"
+        hash_file = os.path.join(ntlm_hashes_dir, hash_filename)
+        
+        # Raw hash filename for direct hashcat input (without formatting)
+        raw_hash_filename = f"{os.path.splitext(target_filename)[0]}_raw.txt"
+        raw_hash_file = os.path.join(ntlm_hashes_dir, raw_hash_filename)
+        
+        # Check if using bruteforce mode
+        is_bruteforce = self.hash_attack_type.get() == "Bruteforce" if hasattr(self, 'hash_attack_type') else False
+        
+        # Determine the hash type based on the selection in the dropdown
+        selected_hash_type = self.hash_type_combo.get() if hasattr(self, 'hash_type_combo') else "NTLM"
+        
+        # Map the selected hash type to the appropriate hashcat mode
+        hash_mode_map = {
+            "NTLM": "1000",      # NTLM
+            "NTLMv2": "5600",    # NetNTLMv2
+            "NetNTLM": "5500",   # NetNTLM
+            "NetNTLMv2": "5600"  # NetNTLMv2
+        }
+        
+        # Get the hash mode from the map, default to NTLM (1000) if not found
+        hash_mode = hash_mode_map.get(selected_hash_type, "1000")
+        
+        self.log_output(f"Using hash type: {selected_hash_type} (Hashcat mode: {hash_mode})")
+        
+        # Read the hash content
+        if os.path.exists(target_file):
+            # Read hash content from file
+            with open(target_file, 'r') as src_file:
+                hash_content = src_file.read().strip()
+        else:
+            # If target_file doesn't exist, it might be direct hash input
+            hash_content = target_file.strip()
+        
+        self.log_output(f"Processing hash input: {hash_content[:50]}..." if len(hash_content) > 50 else f"Processing hash input: {hash_content}")
+            
+        # Try to identify hash format and extract the actual hash value
+        if "Admin:" in hash_content or "..." in hash_content:
+            # This appears to be the format seen in the user's error message
+            processed_content = hash_content
+            
+            # If selected hash type is NTLM, extract just the NTLM hash part
+            # For NetNTLMv2, we need to keep the full format: username::domain:challenge:hash:other
+            if selected_hash_type == "NTLM":
+                # Extract the NTLM hash (32 hex characters)
+                import re
+                ntlm_hashes = re.findall(r'[0-9a-fA-F]{32}', hash_content)
+                if ntlm_hashes:
+                    processed_content = ntlm_hashes[0]
+                    self.log_output(f"Extracted NTLM hash: {processed_content}")
+                else:
+                    # If no valid hash is found, just use the raw content
+                    self.log_output("Could not extract NTLM hash, using raw content instead")
+            elif selected_hash_type in ["NetNTLMv2", "NTLMv2"]:
+                # Ensure the hash is in the correct format for NetNTLMv2
+                # Expected format: username::domain:challenge:NTLM response:other data
+                if "::" in hash_content and hash_content.count(":") >= 4:
+                    # Hash is already properly formatted
+                    self.log_output(f"Hash appears to be properly formatted for {selected_hash_type}")
+                else:
+                    # Try to extract components and reformat
+                    try:
+                        # Common format seen in packet captures: Admin::RazerBlade:493a76dae1a6e269:4D5C2CB820D5A6F5319368E76F825079
+                        # Expected by hashcat: username::domain:challenge:NTLMV2 hash:blob
+                        
+                        # This specific format is commonly seen in Wireshark exports
+                        regex_pattern = r'([^:]+)::([^:]+):([0-9a-f]+):([0-9a-fA-F]+)'
+                        match = re.match(regex_pattern, hash_content)
+                        
+                        if match:
+                            username = match.group(1)
+                            domain = match.group(2)
+                            challenge = match.group(3)
+                            hash_value = match.group(4)
+                            
+                            # Create a properly formatted NetNTLMv2 hash with the blob part
+                            # If the hash value is longer than 32 chars, split it
+                            if len(hash_value) > 32:
+                                ntlm_hash = hash_value[:32]
+                                blob = hash_value[32:]
+                                processed_content = f"{username}::{domain}:{challenge}:{ntlm_hash}:{blob}"
+                            else:
+                                # If we only have the hash part, add a placeholder for the blob
+                                processed_content = f"{username}::{domain}:{challenge}:{hash_value}:any"
+                                
+                            self.log_output(f"Reformatted NetNTLMv2 hash: {processed_content}")
+                        
+                        # If the specific pattern doesn't match, try the more general approaches
+                        # First check for the simple case with separate challenge and hash
+                        parts = re.split(r'[:]+', hash_content)
+                        if len(parts) >= 4:
+                            username = parts[0]
+                            domain = parts[2] if len(parts) > 2 else "domain"
+                            challenge = parts[3] if len(parts) > 3 else ""
+                            ntlm_hash = parts[4] if len(parts) > 4 else ""
+                            
+                            # If the challenge part looks like a challenge but we don't have the hash part
+                            # Sometimes the hash format is username::domain:challenge+hash
+                            if not ntlm_hash and len(challenge) > 32:
+                                # Try to split the challenge+hash part
+                                if len(challenge) > 16:
+                                    ntlm_hash = challenge[16:]
+                                    challenge = challenge[:16]
+                            
+                            # If we found all the required parts
+                            if username and challenge and ntlm_hash:
+                                # Create a properly formatted NetNTLMv2 hash
+                                processed_content = f"{username}::{domain}:{challenge}:{ntlm_hash}:any"
+                                self.log_output(f"Reformatted hash for {selected_hash_type}: {processed_content}")
+                            else:
+                                import re
+                                username_match = re.search(r'([^:]+):', hash_content)
+                                domain_match = re.search(r':([\w\-]+):', hash_content)
+                                challenge_match = re.search(r':([0-9a-f]{16}):', hash_content, re.IGNORECASE)
+                                hash_match = re.search(r':([0-9a-f]{32})', hash_content, re.IGNORECASE)
+                                
+                                if username_match and challenge_match and hash_match:
+                                    username = username_match.group(1)
+                                    domain = domain_match.group(1) if domain_match else "domain"
+                                    challenge = challenge_match.group(1)
+                                    hash_value = hash_match.group(1)
+                                    
+                                    # Create a properly formatted NetNTLMv2 hash
+                                    processed_content = f"{username}::{domain}:{challenge}:{hash_value}:any"
+                                    self.log_output(f"Reformatted hash for {selected_hash_type}: {processed_content}")
+                                else:
+                                    self.log_output(f"Could not reformat hash for {selected_hash_type}. Using original format.")
+                        else:
+                            self.log_output(f"Could not reformat hash for {selected_hash_type}. Using original format.")
+                    except Exception as e:
+                        self.log_output(f"Error reformatting hash: {str(e)}. Using original format.")
+            else:
+                # For other hash types, preserve the original format
+                self.log_output(f"Using original hash format for {selected_hash_type}")
+        else:
+            # Just basic processing to handle common formats
+            processed_content = hash_content.strip()
+            # For NTLM mode, extract just the hash if there's a username prefix
+            if selected_hash_type == "NTLM" and ":" in processed_content:
+                parts = processed_content.split(":", 1)
+                processed_content = parts[1].strip()
+                
+        # Save both processed and raw versions
+        with open(hash_file, 'w') as f:
+            f.write(processed_content)
+        
+        with open(raw_hash_file, 'w') as f:
+            f.write(hash_content)
+            
+        self.log_output(f"Processed hash saved to {hash_file}")
+        
+        # Set up the hashcat command
+        command = [self.hashcat_path if os.path.dirname(self.hashcat_path)
+                   else ("hashcat.exe" if sys.platform=="win32" else "hashcat")]
+        
+        # Define use_pipe variable
+        use_pipe = False
+        
+        if is_bruteforce:
+            # Use bruteforce attack (attack mode 3) with a mask
+            # Create a mask based on the user-specified options
+            mask = self.get_bruteforce_mask()
+            max_length = self.bruteforce_length.get()
+            
+            # Get the character set description for logging
+            char_sets = []
+            if self.use_lowercase.get(): char_sets.append("lowercase")
+            if self.use_uppercase.get(): char_sets.append("uppercase")
+            if self.use_digits.get(): char_sets.append("numbers")
+            if self.use_special.get(): char_sets.append("special chars")
+            
+            # Add appropriate flags for hash format
+            command.extend(["-m", hash_mode, "-a", "3", hash_file, mask, "--increment"])
+            
+            self.log_output(f"Using bruteforce with mask: {mask} (max length: {max_length}, character sets: {', '.join(char_sets)})", "info")
+            
+            # For bruteforce, use stdin pipe for possible interactive use
+            use_pipe = True
+        else:
+            # Validate wordlist path
+            if not self.password_list_path.get():
+                self.log_output("Error: No wordlist selected for dictionary attack.", "error")
+                messagebox.showerror("Error", "Please select a wordlist for dictionary attack.")
+                return
+                
+            # Make sure the wordlist exists
+            if not os.path.exists(self.password_list_path.get()):
+                self.log_output(f"Error: Selected wordlist not found: {self.password_list_path.get()}", "error")
+                messagebox.showerror("Error", f"Selected wordlist not found: {self.password_list_path.get()}")
+                return
+                
+            # Use dictionary attack (attack mode 0) with the selected wordlist directly
+            command.extend(["-m", hash_mode, "-a", "0", hash_file, self.password_list_path.get()])
+            self.log_output(f"Using dictionary attack with wordlist: {self.password_list_path.get()}")
+        
+        # Set output file in the hashes directory
+        outfile_path = os.path.join(ntlm_hashes_dir, f"{os.path.splitext(target_filename)[0]}_cracked.txt").replace('\\', '/')
+        command.extend(["--outfile", outfile_path])
+        
+        if "--force" not in command:
+            command.append("--force")
+            
+        self.log_output(f"Executing command: {' '.join(command)}")
+        hashcat_dir = os.path.dirname(self.hashcat_path) if os.path.dirname(self.hashcat_path) else None
+        
+        # Variable to track if a password was found
+        found_password = None
+        
+        try:
+            if use_pipe:
+                self.cracking_process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, 
+                                                       stdin=subprocess.PIPE, text=True, bufsize=1, cwd=hashcat_dir)
+            else:
+                self.cracking_process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, 
+                                                       text=True, bufsize=1, cwd=hashcat_dir)
+            
+            # Process and display hashcat output
+            for line in iter(self.cracking_process.stdout.readline, ''):
+                if not self.is_cracking:  # If process was stopped by user
+                    break
+                    
+                self.log_output(line.strip())
+                
+                # Check for potfile message
+                if "All hashes found as potfile" in line:
+                    self.log_output("Hash already cracked, checking potfile for password...", is_password=True)
+                    # Get the password from the potfile
+                    self._get_password_from_potfile(hash_file, selected_hash_type)
+                    return
+                
+                # Look for password in the output
+                if "Plain.Text." in line and ":" in line:
+                    try:
+                        # Extract the password part which comes after the colon in the Plain.Text section
+                        parts = line.split("Plain.Text.", 1)[1].split(":", 1)
+                        if len(parts) >= 2:
+                            found_password = parts[1].strip()
+                    except Exception:
+                        # Fallback if the splitting fails
+                        if ":" in line:
+                            found_password = line.split(":", 1)[1].strip()
+            
+            # Wait for process to complete if still cracking
+            if self.is_cracking:
+                self.cracking_process.wait()
+                
+                # If we detected a cracked password directly from the output, report it
+                if found_password:
+                    self.log_output("Password cracking completed successfully!", is_password=True)
+                    self.log_output(f"PASSWORD FOUND: {found_password}", is_password=True)
+                    self._save_cracked_password(target_file, found_password)
+                    # Show success message box
+                    messagebox.showinfo("Success!", f"Password found: {found_password}")
+                    return
+                
+                # If no password was detected in real-time, let's check if one was created
+                # Sometimes hashcat finds a password but doesn't show it clearly in the output
+                outfile_path = os.path.join(ntlm_hashes_dir, f"{os.path.splitext(target_filename)[0]}_cracked.txt")
+                self.log_output("Checking for password in output files...")
+                
+                # Check if the outfile contains a password
+                if os.path.exists(outfile_path) and os.path.getsize(outfile_path) > 0:
+                    try:
+                        with open(outfile_path, 'r', encoding='utf-8', errors='ignore') as f:
+                            content = f.read().strip()
+                            if content and ":" in content:
+                                # For NetNTLMv2, the password is at the end after the last colon
+                                password = content.split(":")[-1].strip()
+                                if password:
+                                    self.log_output("Password cracking completed successfully!", is_password=True)
+                                    self.log_output(f"PASSWORD FOUND: {password}", is_password=True)
+                                    self._save_cracked_password(target_file, password)
+                                    # Show success message box
+                                    messagebox.showinfo("Success!", f"Password found: {password}")
+                                    return
+                    except Exception as e:
+                        self.log_output(f"Error reading output file: {str(e)}")
+                
+                # As a final check, run hashcat with --show to see if it finds anything in the potfile
+                show_cmd = [self.hashcat_path, "-m", hash_mode, "--show", hash_file]
+                self.log_output(f"Running final check with command: {' '.join(show_cmd)}")
+                try:
+                    show_result = subprocess.run(show_cmd, capture_output=True, text=True)
+                    output = show_result.stdout.strip()
+                    if output:
+                        # Process based on hash type
+                        if selected_hash_type in ["NetNTLMv2", "NTLMv2"] and ":" in output:
+                            password = output.split(":")[-1].strip()
+                            self.log_output("Password cracking completed successfully!", is_password=True)
+                            self.log_output(f"PASSWORD FOUND: {password}", is_password=True)
+                            self._save_cracked_password(target_file, password)
+                            # Show success message box
+                            messagebox.showinfo("Success!", f"Password found: {password}")
+                            return
+                except Exception as e:
+                    self.log_output(f"Error running show command: {str(e)}")
+                
+                # If we get here, no password was found
+                self.log_output("Password not found or could not be detected.", is_password=True)
         except Exception as e:
             self.log_output(f"Error executing hashcat command: {str(e)}")
             self.log_output("Command that failed: " + " ".join(command))
@@ -1838,9 +2782,11 @@ class PasswordCrackerApp:
         try:
             save_path = os.path.join(os.path.dirname(target_file), "cracked_password.txt")
             with open(save_path, 'w', encoding='utf-8') as f:
-                f.write(f"{target_file}:{password}")
+                f.write(f"Target: {target_file}\nPassword: {password}")
+            return password  # Return just the password itself
         except Exception as e:
-            self.log_output("Note: Couldn't save password to file, but it was found!")
+            self.log_output(f"Note: Couldn't save password to file: {str(e)}")
+            return password  # Still return the password even if saving fails
     
     def log_output(self, message, is_password=False):
         if self.output_text:
@@ -1915,6 +2861,25 @@ class PasswordCrackerApp:
                 
                 # Make sure output frame is visible for these tabs
                 self.output_frame.pack(fill=tk.BOTH, expand=True, pady=5)
+                
+                # Ensure the sash position gives enough room to the output area
+                # Get a reasonable position (about 45-50% of window height)
+                window_height = self.root.winfo_height()
+                target_position = min(int(window_height * 0.4), 250)
+                
+                # Only set if our sash is too low (giving too little space to output)
+                try:
+                    current_pos = self.main_paned.sashpos(0)
+                    if current_pos > window_height - 200:  # If sash is too low (output area too small)
+                        self.main_paned.sashpos(0, target_position)
+                        # Save this position in config
+                        self.config['sash_position'] = target_position
+                except Exception:
+                    # If we can't get or set sash position, just try using our target
+                    try:
+                        self.main_paned.sashpos(0, target_position)
+                    except Exception:
+                        pass
             except Exception as e:
                 print(f"Error setting up tab layout: {e}")
         
@@ -1959,10 +2924,10 @@ class PasswordCrackerApp:
         try:
             # Default file name with timestamp
             timestamp = time.strftime("%Y%m%d-%H%M%S")
-            default_filename = f"passcrack_output_{timestamp}.txt"
+            default_filename = f"p4wnforge_output_{timestamp}.txt"
             
             # Get output directory path
-            output_dir = os.path.join(os.path.expanduser("~"), ".passcrack", "logs")
+            output_dir = os.path.join(os.path.expanduser("~"), ".p4wnforge", "logs")
             os.makedirs(output_dir, exist_ok=True)
             
             # Open save dialog
@@ -2064,7 +3029,16 @@ class PasswordCrackerApp:
         path_frame.pack(fill=tk.X, pady=(0, 5))
         
         ttk.Label(path_frame, text="Current Directory:").pack(side=tk.LEFT, padx=5)
-        ttk.Entry(path_frame, textvariable=self.ssh_current_dir, width=50, state="readonly").pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+        
+        # Create a custom Entry widget for current directory that will work with dark mode
+        self.ssh_current_dir_entry = tk.Entry(path_frame, textvariable=self.ssh_current_dir, width=50, state="readonly")
+        self.ssh_current_dir_entry.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+        
+        # Apply the current theme immediately
+        if self.is_dark_mode.get():
+            self.ssh_current_dir_entry.config(readonlybackground='#3E3E3E', fg='#FFFFFF')
+        else:
+            self.ssh_current_dir_entry.config(readonlybackground='#F0F0F0', fg='#000000')
         
         # Main browser area with fixed height
         browser_frame = ttk.LabelFrame(ssh_frame, text="Remote Files", height=400)
@@ -2153,7 +3127,7 @@ class PasswordCrackerApp:
         try:
             # Ensure the SSH sessions file is defined
             if not hasattr(self, 'ssh_sessions_file'):
-                config_dir = os.path.join(os.path.expanduser("~"), ".passcrack")
+                config_dir = os.path.join(os.path.expanduser("~"), ".p4wnforge")
                 os.makedirs(config_dir, exist_ok=True)
                 self.ssh_sessions_file = os.path.join(config_dir, "ssh_sessions.json")
                 
@@ -2186,7 +3160,7 @@ class PasswordCrackerApp:
         try:
             # Ensure the SSH sessions file is defined
             if not hasattr(self, 'ssh_sessions_file'):
-                config_dir = os.path.join(os.path.expanduser("~"), ".passcrack")
+                config_dir = os.path.join(os.path.expanduser("~"), ".p4wnforge")
                 os.makedirs(config_dir, exist_ok=True)
                 self.ssh_sessions_file = os.path.join(config_dir, "ssh_sessions.json")
                 
@@ -2263,7 +3237,7 @@ class PasswordCrackerApp:
             try:
                 # Ensure the SSH sessions file is defined
                 if not hasattr(self, 'ssh_sessions_file'):
-                    config_dir = os.path.join(os.path.expanduser("~"), ".passcrack")
+                    config_dir = os.path.join(os.path.expanduser("~"), ".p4wnforge")
                     os.makedirs(config_dir, exist_ok=True)
                     self.ssh_sessions_file = os.path.join(config_dir, "ssh_sessions.json")
                     
@@ -2535,9 +3509,114 @@ class PasswordCrackerApp:
         # Save the found dictionaries
         self.save_dictionaries()
 
+    def _get_password_from_potfile(self, hash_file, hash_type):
+        """Get the password from the potfile by running hashcat with --show"""
+        try:
+            # First check if there's a cracked_password.txt file
+            outfile_path = hash_file.replace("_processed.txt", "_cracked.txt")
+            if os.path.exists(outfile_path):
+                with open(outfile_path, 'r', encoding='utf-8', errors='ignore') as f:
+                    content = f.read().strip()
+                    if content:
+                        # For NetNTLMv2, the password is at the end after the last colon
+                        if hash_type in ["NetNTLMv2", "NTLMv2"] and ":" in content:
+                            password = content.split(":")[-1].strip()
+                            self.log_output(f"PASSWORD FOUND: {password}", is_password=True)
+                            self._save_cracked_password(hash_file, password)
+                            # Show success message box
+                            messagebox.showinfo("Success!", f"Password found: {password}")
+                            return True
+            
+            # If no cracked_password.txt or couldn't parse it, try running hashcat --show
+            hash_mode = "5600" if hash_type in ["NetNTLMv2", "NTLMv2"] else "1000"
+            command = [self.hashcat_path, "-m", hash_mode, "--show", hash_file]
+            self.log_output(f"Running command to get password: {' '.join(command)}")
+            
+            show_result = subprocess.run(command, capture_output=True, text=True)
+            output = show_result.stdout.strip()
+            
+            if output:
+                # For NetNTLMv2, the password is at the end after the last colon
+                if hash_type in ["NetNTLMv2", "NTLMv2"] and ":" in output:
+                    password = output.split(":")[-1].strip()
+                    self.log_output(f"PASSWORD FOUND: {password}", is_password=True)
+                    self._save_cracked_password(hash_file, password)
+                    # Show success message box
+                    messagebox.showinfo("Success!", f"Password found: {password}")
+                    return True
+                # For regular NTLM, try to extract password
+                elif ":" in output:
+                    password = output.split(":", 1)[1].strip()
+                    self.log_output(f"PASSWORD FOUND: {password}", is_password=True)
+                    self._save_cracked_password(hash_file, password)
+                    # Show success message box
+                    messagebox.showinfo("Success!", f"Password found: {password}")
+                    return True
+            
+            self.log_output("Could not retrieve password from potfile.", is_password=True)
+            return False
+        except Exception as e:
+            self.log_output(f"Error getting password from potfile: {str(e)}")
+            return False
+
+def create_splash_screen(root):
+    """Create and show a splash screen"""
+    splash = tk.Toplevel(root)
+    splash.title("P4wnForge")
+    splash.overrideredirect(True)  # Remove window decorations
+    
+    # Calculate position to center the splash screen
+    splash_width = 400
+    splash_height = 400
+    screen_width = root.winfo_screenwidth()
+    screen_height = root.winfo_screenheight()
+    x_position = (screen_width - splash_width) // 2
+    y_position = (screen_height - splash_height) // 2
+    
+    splash.geometry(f"{splash_width}x{splash_height}+{x_position}+{y_position}")
+    
+    try:
+        # Load the splash image
+        splash_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "p4wnForgeSplash.webp")
+        if os.path.exists(splash_path):
+            img = Image.open(splash_path)
+            img = img.resize((splash_width, splash_height), Image.LANCZOS)
+            splash_img = ImageTk.PhotoImage(img)
+            
+            # Create a label with the image
+            splash_label = tk.Label(splash, image=splash_img)
+            splash_label.image = splash_img  # Keep a reference
+            splash_label.pack(fill="both", expand=True)
+        else:
+            # Fallback if image not found
+            tk.Label(splash, text="P4wnForge", font=("Helvetica", 24, "bold")).pack(pady=50)
+    except Exception as e:
+        print(f"Error creating splash screen: {e}")
+        # Fallback if there's an error
+        tk.Label(splash, text="P4wnForge", font=("Helvetica", 24, "bold")).pack(pady=50)
+    
+    # Make sure splash is on top and gets focus
+    splash.attributes('-topmost', True)
+    splash.update()
+    
+    return splash
+
 def main():
     root = tk.Tk()
-    app = PasswordCrackerApp(root)
+    root.withdraw()  # Hide the main window initially
+    
+    # Show splash screen
+    splash = create_splash_screen(root)
+    
+    # Function to destroy splash and show main window
+    def close_splash():
+        splash.destroy()
+        root.deiconify()  # Show the main window
+        app = PasswordCrackerApp(root)
+    
+    # Schedule the splash to close after 2 seconds
+    root.after(2000, close_splash)
+    
     root.mainloop()
 
 if __name__ == "__main__":
